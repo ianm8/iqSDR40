@@ -9,4 +9,6 @@ A small software defined transceiver for 40M using the phasing method of image r
 * Floating point DSP
 * LSB, USB and CW
 * 30 KHz spectrum display
+* Effective AGC and S meter
 * Mostly 1206 SM parts
+* 100mm X 80mm
