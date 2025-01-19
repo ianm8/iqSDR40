@@ -12,3 +12,6 @@ A small software defined transceiver for 40M using the phasing method of image r
 * Effective AGC and S meter
 * Mostly 1206 SM parts
 * 100mm X 80mm
+
+![alt text](https://github.com/ianm8/iqSDR40/blob/main/docs/iqSDR40-Complete-1.jpg?raw=true)
+
