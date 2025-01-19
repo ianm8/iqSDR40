@@ -12,6 +12,7 @@
  *
  * Build:
  *  Board: Pi Pico 2
+ *  Flash 4MB (Sketch: 4032KB, FS: 64KB)
  *  CPU Speed: 240Mhz
  *  Optimize: -O2
  *  USB Stack: No USB
@@ -260,7 +261,8 @@ void setup(void)
   digitalWrite(LED_BUILTIN,LOW);
   vreg_set_voltage(VREG_VOLTAGE_1_30);
   const uint32_t clksys = frequency_count_khz(CLOCKS_FC0_SRC_VALUE_CLK_SYS);
-  if (clksys != 240000ul)
+  // frequency_count_khz() isn't accurate!
+  if (clksys < (240000ul - 5ul) || clksys > (240000ul + 5ul))
   {
     // trap the wrong system clock
     pinMode(LED_BUILTIN,OUTPUT);
@@ -355,7 +357,7 @@ void setup(void)
     {
       pinMode(LED_BUILTIN,OUTPUT);
       digitalWrite(LED_BUILTIN,HIGH);
-      delay(50);
+      delay(10);
       digitalWrite(LED_BUILTIN,LOW);
       delay(500);
     }
@@ -735,6 +737,7 @@ static const option_value_t process_menu(void)
         return option;
       }
       // process menu options
+      menu_timeout = millis()+MENU_TIMEOUT;
       const uint8_t num_options = menu_options[menu_current].num_options;
       uint8_t option_window = 0;
       uint8_t option_current = 0;

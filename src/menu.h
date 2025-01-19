@@ -110,8 +110,8 @@ menu_options[] =
     "Spectrum",
     5U,
     {
-      {OPTION_SPECTRUM_RX,"RX On"},
-      {OPTION_SPECTRUM_TX,"TX On"},
+      {OPTION_SPECTRUM_RX,"RX Only"},
+      {OPTION_SPECTRUM_TX,"TX Only"},
       {OPTION_SPECTRUM_RXTX,"RX/TX On"},
       {OPTION_SPECTRUM_OFF,"Off"},
       {OPTION_EXIT,"Exit"},

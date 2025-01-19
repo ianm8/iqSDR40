@@ -8,7 +8,7 @@
 
 namespace FILTER
 {
-  static float dcf(const float in)
+  static float __not_in_flash_func(dcf)(const float in)
   {
     // single pole IIR high-pass filter
     //static const float k = 0.004f; // <100Hz
