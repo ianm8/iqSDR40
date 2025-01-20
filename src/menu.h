@@ -30,7 +30,7 @@
 
 */
 
-#define NUM_MENU_ITEMS 5U
+#define NUM_MENU_ITEMS 7U
 
 enum menu_top_t
 {
@@ -38,6 +38,8 @@ enum menu_top_t
   MENU_MODE,
   MENU_JNR,
   MENU_SPECTRUM,
+  MENU_CW_MODE,
+  MENU_CW_SPEED,
   MENU_EXIT
 };
 
@@ -60,6 +62,12 @@ enum option_value_t
   OPTION_JNR_2,
   OPTION_JNR_3,
   OPTION_JNR_OFF,
+  OPTION_CW_STRAIGHT,
+  OPTION_CW_PADDLE,
+  OPTION_CW_SPEED_10,
+  OPTION_CW_SPEED_15,
+  OPTION_CW_SPEED_20,
+  OPTION_CW_SPEED_25,
   OPTION_EXIT,
   OPTION_NULL
 };
@@ -114,6 +122,32 @@ menu_options[] =
       {OPTION_SPECTRUM_TX,"TX Only"},
       {OPTION_SPECTRUM_RXTX,"RX/TX On"},
       {OPTION_SPECTRUM_OFF,"Off"},
+      {OPTION_EXIT,"Exit"},
+      {OPTION_NULL,"NULL"}
+    }
+  },
+  {
+    MENU_CW_MODE,
+    "CW Mode",
+    3U,
+    {
+      {OPTION_CW_STRAIGHT,"Straight"},
+      {OPTION_CW_PADDLE,"Paddle"},
+      {OPTION_EXIT,"Exit"},
+      {OPTION_NULL,"NULL"},
+      {OPTION_NULL,"NULL"},
+      {OPTION_NULL,"NULL"}
+    }
+  },
+  {
+    MENU_CW_SPEED,
+    "CW Speed",
+    5U,
+    {
+      {OPTION_CW_SPEED_10,"10 WPM"},
+      {OPTION_CW_SPEED_15,"15 WPM"},
+      {OPTION_CW_SPEED_20,"20 WPM"},
+      {OPTION_CW_SPEED_25,"25 WPM"},
       {OPTION_EXIT,"Exit"},
       {OPTION_NULL,"NULL"}
     }

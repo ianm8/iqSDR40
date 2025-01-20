@@ -1,5 +1,5 @@
 /*
- * iqSDR40 Version 0.9.240
+ * iqSDR40 Version 1.0.240
  *
  * Copyright 2025 Ian Mitchell VK7IAN
  * Licenced under the GNU GPL Version 3
@@ -34,7 +34,7 @@
 
 //#define YOUR_CALL "VK7IAN"
 
-#define VERSION_STRING         " V0.9."
+#define VERSION_STRING         " V1.0."
 #define SPECTRUM_OFF           0u
 #define SPECTRUM_RX            1u
 #define SPECTRUM_TX            2u
@@ -47,6 +47,9 @@
 #define DEFAULT_STEP           1000ul
 #define DEFAULT_JNR            0u
 #define DEFAULT_SPECTRUM       SPECTRUM_OFF
+#define DEFAULT_CW_MODE        CW_STRAIGHT
+#define DEFAULT_CW_TIME        60u
+#define CW_SIDETONE            700u
 #define BUTTON_LONG_PRESS_TIME 800ul
 #define SHOW_STEP_TIMEOUT      8000ul
 #define TCXO_FREQ              26000000ul
@@ -57,6 +60,8 @@
 #define MAX_ADC_SAMPLES        2048
 #define MUTE                   LOW
 #define UNMUTE                 HIGH
+#define CW_STRAIGHT            0u
+#define CW_PADDLE              1u
 
 #define PIN_PTT      0 // Mic PTT (active low) and CW Paddle A
 #define PIN_UNUSED1  1 // free pin
@@ -132,6 +137,8 @@ volatile static struct
   radio_setmode_t set_mode;
   uint8_t jnr;
   uint8_t spectrum;
+  uint8_t cw_mode;
+  uint8_t cw_time;
   bool tx_enable;
   bool keydown;
 }
@@ -144,6 +151,8 @@ radio =
   SETMODE_AUTO,
   DEFAULT_JNR,
   DEFAULT_SPECTRUM,
+  DEFAULT_CW_MODE,
+  DEFAULT_CW_TIME,
   false,
   false
 };
@@ -233,6 +242,8 @@ static void save_settings(void)
   EEPROM.put(0*sizeof(uint32_t),key);
   EEPROM.put(1*sizeof(uint32_t),(uint32_t)radio.jnr);
   EEPROM.put(2*sizeof(uint32_t),(uint32_t)radio.spectrum);
+  EEPROM.put(3*sizeof(uint32_t),(uint32_t)radio.cw_mode);
+  EEPROM.put(4*sizeof(uint32_t),(uint32_t)radio.cw_time);
   EEPROM.end();
   init_i2s();
   digitalWrite(PIN_MUTE,UNMUTE);
@@ -248,6 +259,8 @@ static void restore_settings(void)
     uint32_t data32 = 0;
     EEPROM.get(1*sizeof(uint32_t),data32); radio.jnr = (uint8_t)data32;
     EEPROM.get(2*sizeof(uint32_t),data32); radio.spectrum = (uint8_t)data32;
+    EEPROM.get(3*sizeof(uint32_t),data32); radio.cw_mode = (uint8_t)data32;
+    EEPROM.get(4*sizeof(uint32_t),data32); radio.cw_time = (uint8_t)data32;
   }
   EEPROM.end();
 }
@@ -837,6 +850,15 @@ void __not_in_flash_func(loop)(void)
         adc_data_q[adc_sample_p] = tx_q<<5;
         adc_sample_p++;
         adc_sample_p &= (MAX_ADC_SAMPLES-1);
+        if (radio.mode==MODE_CWL || radio.mode==MODE_CWU)
+        {
+          // generate the sidetone
+          int32_t dac_audio = CW::sidetone(radio.keydown);
+          dac_audio = constrain(dac_audio,-2048l,+2047l);
+          dac_audio += 2048l;
+          dac_h = dac_audio >> 6;
+          dac_l = dac_audio & 0x3f;
+        }
       }
     }
     else
@@ -883,8 +905,8 @@ void __not_in_flash_func(loop)(void)
           {
             case MODE_LSB: dac_audio = DSP::process_ssb(qq,ii,radio.jnr); break;
             case MODE_USB: dac_audio = DSP::process_ssb(ii,qq,radio.jnr); break;
-            case MODE_CWL: dac_audio = DSP::process_cw(qq,ii);  break;
-            case MODE_CWU: dac_audio = DSP::process_cw(ii,qq);  break;
+            case MODE_CWL: dac_audio = DSP::process_cw(qq,ii);            break;
+            case MODE_CWU: dac_audio = DSP::process_cw(ii,qq);            break;
           }
           dac_audio = constrain(dac_audio,-2048l,+2047l);
           dac_audio += 2048l;
@@ -1026,11 +1048,18 @@ static void process_ssb_tx(void)
   }
 }
 
+static void cw_delay(const uint32_t ms,const uint32_t level)
+{
+  const uint32_t delay_time = millis()+ms;
+  update_display(level);
+  while (delay_time>millis())
+  {
+    tight_loop_contents();
+  }
+}
+
 static void process_key(void)
 {
-  // mute the receiver
-  analogWrite(PIN_MUTE,MUTE);
-
   // disable QSD
   digitalWrite(PIN_RXN,HIGH);
   delay(10);
@@ -1046,30 +1075,88 @@ static void process_key(void)
 
   // stay here until timeout after key up (PTT released)
   uint32_t cw_timeout = millis() + CW_TIMEOUT;
-  for (;;)
+  if (radio.cw_mode==CW_STRAIGHT)
   {
-    if (digitalRead(PIN_PTT)==LOW)
+    for (;;)
     {
-      // indicate PTT pressed
-      digitalWrite(LED_BUILTIN,HIGH);
-      radio.keydown = true;
-      cw_timeout = millis() + CW_TIMEOUT;
-      update_display(63u);
-      delay(20);
+      if (digitalRead(PIN_PTT)==LOW)
+      {
+        // indicate PTT pressed
+        digitalWrite(LED_BUILTIN,HIGH);
+        radio.keydown = true;
+        cw_timeout = millis() + CW_TIMEOUT;
+        update_display(63u);
+        delay(20);
+      }
+      else
+      {
+        // indicate PTT released
+        digitalWrite(LED_BUILTIN,LOW);
+        radio.keydown = false;
+        update_display(0u);
+        delay(20);
+        if (millis()>cw_timeout)
+        {
+          break;
+        }
+      }
     }
-    else
+  }
+  else
+  {
+    // paddle
+    for (;;)
     {
-      // indicate PTT released
-      digitalWrite(LED_BUILTIN,LOW);
-      radio.keydown = false;
-      update_display(0u);
-      delay(20);
+      if (digitalRead(PIN_PTT)==LOW)
+      {
+        // dit
+        cw_delay(radio.cw_time,0u);
+        radio.keydown = true;
+        digitalWrite(LED_BUILTIN,HIGH);
+        cw_delay(radio.cw_time,15u);
+        radio.keydown = false;
+        digitalWrite(LED_BUILTIN,LOW);
+        cw_timeout = millis() + CW_TIMEOUT;
+      }
+      if (digitalRead(PIN_PADB)==LOW)
+      {
+        // dah
+        cw_delay(radio.cw_time,0u);
+        radio.keydown = true;
+        digitalWrite(LED_BUILTIN,HIGH);
+        cw_delay(radio.cw_time * 3, 63u);
+        radio.keydown = false;
+        digitalWrite(LED_BUILTIN,LOW);
+        cw_timeout = millis() + CW_TIMEOUT;
+      }
+      if (digitalRead(PIN_PTT)==LOW && digitalRead(PIN_PADB)==LOW)
+      {
+        // dit
+        cw_delay(radio.cw_time,0u);
+        radio.keydown = true;
+        digitalWrite(LED_BUILTIN,HIGH);
+        cw_delay(radio.cw_time,63u);
+        radio.keydown = false;
+        digitalWrite(LED_BUILTIN,LOW);
+        // dah
+        cw_delay(radio.cw_time,0u);
+        radio.keydown = true;
+        digitalWrite(LED_BUILTIN,HIGH);
+        cw_delay(radio.cw_time * 3,63u);
+        radio.keydown = false;
+        digitalWrite(LED_BUILTIN,LOW);
+        cw_timeout = millis() + CW_TIMEOUT;
+      }
       if (millis()>cw_timeout)
       {
         break;
       }
     }
   }
+
+  // mute during transition back to receive
+  digitalWrite(PIN_MUTE,MUTE);
+  delay(50);
 }
 
 void loop1(void)
@@ -1079,6 +1166,8 @@ void loop1(void)
   static mode_t old_mode = radio.mode;
   static uint32_t old_spectrum = radio.spectrum;
   static uint32_t old_jnr = radio.jnr;
+  static uint32_t old_cw_mode = radio.cw_mode;
+  static uint32_t old_cw_time = radio.cw_time;
   static uint32_t show_step = 0;
 
   // process button press
@@ -1171,6 +1260,12 @@ void loop1(void)
           case OPTION_JNR_2:         radio.jnr = 2u;                 break; 
           case OPTION_JNR_3:         radio.jnr = 3u;                 break; 
           case OPTION_JNR_OFF:       radio.jnr = 0u;                 break; 
+          case OPTION_CW_STRAIGHT:   radio.cw_mode = CW_STRAIGHT;    break;
+          case OPTION_CW_PADDLE:     radio.cw_mode = CW_PADDLE;      break;
+          case OPTION_CW_SPEED_10:   radio.cw_time = 120u;           break;
+          case OPTION_CW_SPEED_15:   radio.cw_time = 80u;            break;
+          case OPTION_CW_SPEED_20:   radio.cw_time = 60u;            break;
+          case OPTION_CW_SPEED_25:   radio.cw_time = 48u;            break;
         }
         break;
       }
@@ -1186,6 +1281,16 @@ void loop1(void)
     if (radio.jnr != old_jnr)
     {
       old_jnr = radio.jnr;
+      settings_changed = true;
+    }
+    if (radio.cw_mode != old_cw_mode)
+    {
+      old_cw_mode = radio.cw_mode;
+      settings_changed = true;
+    }
+    if (radio.cw_time != old_cw_time)
+    {
+      old_cw_time = radio.cw_time;
       settings_changed = true;
     }
     if (settings_changed)
@@ -1245,8 +1350,11 @@ void loop1(void)
   }
 
   // check for PTT
-  if (digitalRead(PIN_PTT)==LOW)
+  const bool b_PTT = (digitalRead(PIN_PTT)==LOW);
+  const bool b_PADB = (digitalRead(PIN_PADB)==LOW);
+  if (b_PTT || b_PADB)
   {
+    bool back_to_receive = false;
     const float saved_agc = DSP::agc_peak;
     if (radio.mode==MODE_CWL || radio.mode==MODE_CWU)
     {
@@ -1261,21 +1369,26 @@ void loop1(void)
       const uint64_t p_rx = (radio.frequency+correct4cw_rx)*QUADRATURE_DIVISOR*SI5351_FREQ_MULT;
       si5351.set_freq_manual(f_rx,p_rx,SI5351_CLK0);
       si5351.set_freq_manual(f_rx,p_rx,SI5351_CLK1);
+      back_to_receive = true;
     }
-    else
+    else if (b_PTT)
     {
       process_ssb_tx();
+      back_to_receive = true;
     }
-    // back to receive
-    digitalWrite(PIN_TXBIAS,LOW);
-    digitalWrite(PIN_TXN,HIGH);
-    radio.tx_enable = false;
-    delay(10);
-    digitalWrite(PIN_RXN,LOW);
-    digitalWrite(LED_BUILTIN,LOW);
-    update_display();
-    digitalWrite(PIN_MUTE,UNMUTE);
-    delay(50);
-    DSP::agc_peak = saved_agc;
+    if (back_to_receive)
+    {
+      // back to receive
+      digitalWrite(PIN_TXBIAS,LOW);
+      digitalWrite(PIN_TXN,HIGH);
+      radio.tx_enable = false;
+      delay(10);
+      digitalWrite(PIN_RXN,LOW);
+      digitalWrite(LED_BUILTIN,LOW);
+      update_display();
+      digitalWrite(PIN_MUTE,UNMUTE);
+      delay(50);
+      DSP::agc_peak = saved_agc;
+    }
   }
 }
