@@ -1,7 +1,7 @@
 #ifndef UTIL_H
 #define UTIL_H
 
-#define SAMPLERATE 32150u
+#define SAMPLERATE 31250u
 
 namespace UTIL
 {

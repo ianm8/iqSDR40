@@ -1,5 +1,5 @@
 /*
- * iqSDR40 Version 1.0.240
+ * iqSDR40 Version 1.1.240
  *
  * Copyright 2025 Ian Mitchell VK7IAN
  * Licenced under the GNU GPL Version 3
@@ -34,7 +34,7 @@
 
 //#define YOUR_CALL "VK7IAN"
 
-#define VERSION_STRING         " V1.0."
+#define VERSION_STRING         " V1.1."
 #define SPECTRUM_OFF           0u
 #define SPECTRUM_RX            1u
 #define SPECTRUM_TX            2u
@@ -1113,7 +1113,7 @@ static void process_key(void)
         cw_delay(radio.cw_time,0u);
         radio.keydown = true;
         digitalWrite(LED_BUILTIN,HIGH);
-        cw_delay(radio.cw_time,15u);
+        cw_delay(radio.cw_time,63u);
         radio.keydown = false;
         digitalWrite(LED_BUILTIN,LOW);
         cw_timeout = millis() + CW_TIMEOUT;
@@ -1124,7 +1124,7 @@ static void process_key(void)
         cw_delay(radio.cw_time,0u);
         radio.keydown = true;
         digitalWrite(LED_BUILTIN,HIGH);
-        cw_delay(radio.cw_time * 3, 63u);
+        cw_delay(radio.cw_time*3,63u);
         radio.keydown = false;
         digitalWrite(LED_BUILTIN,LOW);
         cw_timeout = millis() + CW_TIMEOUT;
@@ -1142,7 +1142,7 @@ static void process_key(void)
         cw_delay(radio.cw_time,0u);
         radio.keydown = true;
         digitalWrite(LED_BUILTIN,HIGH);
-        cw_delay(radio.cw_time * 3,63u);
+        cw_delay(radio.cw_time*3,63u);
         radio.keydown = false;
         digitalWrite(LED_BUILTIN,LOW);
         cw_timeout = millis() + CW_TIMEOUT;
