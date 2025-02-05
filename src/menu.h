@@ -30,7 +30,7 @@
 
 */
 
-#define NUM_MENU_ITEMS 7U
+#define NUM_MENU_ITEMS 9U
 
 enum menu_top_t
 {
@@ -40,6 +40,8 @@ enum menu_top_t
   MENU_SPECTRUM,
   MENU_CW_MODE,
   MENU_CW_SPEED,
+  MENU_MIC_GAIN,
+  MENU_CESSB,
   MENU_EXIT
 };
 
@@ -68,6 +70,13 @@ enum option_value_t
   OPTION_CW_SPEED_15,
   OPTION_CW_SPEED_20,
   OPTION_CW_SPEED_25,
+  OPTION_MIC_50,
+  OPTION_MIC_75,
+  OPTION_MIC_100,
+  OPTION_MIC_125,
+  OPTION_MIC_150,
+  OPTION_CESSB_ON,
+  OPTION_CESSB_OFF,
   OPTION_EXIT,
   OPTION_NULL
 };
@@ -162,6 +171,32 @@ menu_options[] =
       {OPTION_STEP_500,"500"},
       {OPTION_STEP_1000,"1000"},
       {OPTION_EXIT,"Exit"},
+      {OPTION_NULL,"NULL"}
+    }
+  },
+  {
+    MENU_MIC_GAIN,
+    "Mic Gain",
+    6U,
+    {
+      {OPTION_MIC_50,"Gain 50%"},
+      {OPTION_MIC_75,"Gain 75%"},
+      {OPTION_MIC_100,"Gain 100%"},
+      {OPTION_MIC_125,"Gain 125%"},
+      {OPTION_MIC_150,"Gain 150%"},
+      {OPTION_EXIT,"Exit"}
+    }
+  },
+  {
+    MENU_CESSB,
+    "CESSB",
+    3U,
+    {
+      {OPTION_CESSB_ON,"CESSB On"},
+      {OPTION_CESSB_OFF,"CESSB Off"},
+      {OPTION_EXIT,"Exit"},
+      {OPTION_NULL,"NULL"},
+      {OPTION_NULL,"NULL"},
       {OPTION_NULL,"NULL"}
     }
   },

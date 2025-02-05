@@ -18,8 +18,11 @@ namespace DSP
 
   static const int16_t __not_in_flash_func(agc)(const float in)
   {
+    // limit gain to max of 40 (32db)
+    static const float max_gain = 40.0f;
     // about 10dB per second
     static const float k = 0.99996f;
+
     const float magnitude = fabsf(in);
     if (magnitude>agc_peak)
     {
@@ -30,11 +33,11 @@ namespace DSP
       agc_peak *= k;
     }
 
+    // trap issues with low values
+    if (agc_peak<1.0f) return (int16_t)(in * max_gain);
+
     // set maximum gain possible for 12 bit DAC
     const float m = 2047.0f/agc_peak;
-
-    // limit gain to max of 40 (32db)
-    static const float max_gain = 40.0f;
     return (int16_t)(in*fminf(m,max_gain));
   }
 
@@ -88,7 +91,7 @@ namespace DSP
     return agc(audio_out * 32768.0f);
   }
 
-  static const int16_t __not_in_flash_func(process_cw)(const int16_t in_i,const int16_t in_q)
+  static const int16_t __not_in_flash_func(process_cw)(const int16_t in_i,const int16_t in_q,const uint32_t jnr_level)
   {
     const float ii = FILTER::dc1f((float)in_i / 32768.0f);
     const float qq = FILTER::dc2f((float)in_q / 32768.0f);
@@ -100,14 +103,54 @@ namespace DSP
     // reject image
     const float ssb = p45 - n45;
 
-    // BPF and extra gain for CW
-    const float audio_out = FILTER::bpf_700f(ssb * 2.0f);
+    // BPF for CW
+    const float audio_raw = FILTER::bpf_700f(ssb);
+
+    // JNR
+    const float audio_out = FILTER::jnr(audio_raw,jnr_level);
 
     // AGC returns 12 bit value
     return agc(audio_out * 32768.0f);
   }
 
-  const void __not_in_flash_func(process_mic)(const int16_t s,int16_t &out_i,int16_t &out_q)
+  static const uint32_t __not_in_flash_func(get_mic_peak_level)(const int16_t mic_in)
+  {
+    static const uint32_t MIC_LEVEL_DECAY_RATE = 50ul;
+    static const uint32_t MIC_LEVEL_HANG_TIME = 500ul;
+    static uint32_t mic_peak_level = 0;
+    static uint32_t mic_level_update = 0;
+    static uint32_t mic_hangtime_update = 0;
+    const uint32_t now = millis();
+    const uint32_t mic_level = abs(mic_in)>>5;
+    if (mic_level>mic_peak_level)
+    {
+      mic_peak_level = mic_level;
+      mic_level_update = now + MIC_LEVEL_DECAY_RATE;
+      mic_hangtime_update = now + MIC_LEVEL_HANG_TIME;
+    }
+    else
+    {
+      if (now>mic_hangtime_update)
+      {
+        if (now>mic_level_update)
+        {
+          if (mic_peak_level) mic_peak_level--;
+          mic_level_update = now + MIC_LEVEL_DECAY_RATE;
+        }
+      }
+    }
+    return mic_peak_level;
+  }
+
+  static void __not_in_flash_func(cessb)(float& ii, float& qq)
+  {
+    const float mag_raw = sqrtf(ii*ii + qq*qq);
+    const float mag_max = fmaxf(mag_raw, 1.0f);
+    ii = FILTER::lpf_2400if_tx(ii / mag_max);
+    qq = FILTER::lpf_2400qf_tx(qq / mag_max);
+  }
+
+  const void __not_in_flash_func(process_mic)(const int16_t s,int16_t &out_i,int16_t &out_q,const float mic_gain,const bool cessb_on)
   {
     // input is 12 bits
     // convert to float
@@ -115,16 +158,17 @@ namespace DSP
     // 2400 LPF 
     // phase shift I
     // phase shift Q
-    // conver to int
+    // convert to int
     // output is 10 bits
-////
-    //const float ac_sig = FILTER::dcf(((float)s)*(1.0f/2048.0f));
-    const float ac_sig = FILTER::dcf(((float)s)*(1.0f/1500.0f));
+    const float ac_sig = FILTER::dcf(((float)s)*(1.0f/2048.0f));
     const float mic_sig = FILTER::lpf_2400f_tx(ac_sig);
-    const float ii = FILTER::fap1f(mic_sig);
-    const float qq = FILTER::fap2f(mic_sig);
-    out_i = (int16_t)(ii * 512.0f);
-    out_q = (int16_t)(qq * 512.0f);
+    const float ii1 = FILTER::fap1f(mic_sig);
+    const float qq1 = FILTER::fap2f(mic_sig);
+    float ii2 = ii1 * mic_gain;
+    float qq2 = qq1 * mic_gain;
+    if (cessb_on) cessb(ii2,qq2);
+    out_i = (int16_t)(ii2 * 512.0f);
+    out_q = (int16_t)(qq2 * 512.0f);
   }
 }
 

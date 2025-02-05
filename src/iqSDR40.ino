@@ -1,5 +1,5 @@
 /*
- * iqSDR40 Version 1.1.240
+ * iqSDR40 Version 2.1.240
  *
  * Copyright 2025 Ian Mitchell VK7IAN
  * Licenced under the GNU GPL Version 3
@@ -16,6 +16,14 @@
  *  CPU Speed: 240Mhz
  *  Optimize: -O2
  *  USB Stack: No USB
+ *
+ * Version 0.9.240 code cleanup
+ * Version 1.0.240 CW paddle support and bug fixes
+ * Version 1.1.240 bug fixes
+ * Version 1.2.240 delay mic level to settle
+ * Version 1.3.240 update filters
+ * Version 2.0.240 CESSB
+ * Version 2.1.240 mic gain
  */
 
 #include <si5351.h>
@@ -34,7 +42,7 @@
 
 //#define YOUR_CALL "VK7IAN"
 
-#define VERSION_STRING         " V1.1."
+#define VERSION_STRING         " V2.1."
 #define SPECTRUM_OFF           0u
 #define SPECTRUM_RX            1u
 #define SPECTRUM_TX            2u
@@ -49,7 +57,7 @@
 #define DEFAULT_SPECTRUM       SPECTRUM_OFF
 #define DEFAULT_CW_MODE        CW_STRAIGHT
 #define DEFAULT_CW_TIME        60u
-#define CW_SIDETONE            700u
+#define DEFAULT_MIC_GAIN       100u
 #define BUTTON_LONG_PRESS_TIME 800ul
 #define SHOW_STEP_TIMEOUT      8000ul
 #define TCXO_FREQ              26000000ul
@@ -139,6 +147,8 @@ volatile static struct
   uint8_t spectrum;
   uint8_t cw_mode;
   uint8_t cw_time;
+  uint8_t mic_gain;
+  bool cessb;
   bool tx_enable;
   bool keydown;
 }
@@ -153,6 +163,8 @@ radio =
   DEFAULT_SPECTRUM,
   DEFAULT_CW_MODE,
   DEFAULT_CW_TIME,
+  DEFAULT_MIC_GAIN,
+  false,
   false,
   false
 };
@@ -177,8 +189,10 @@ volatile static int16_t adc_value = 0;
 volatile static bool adc_value_ready = false;
 volatile static bool setup_complete = false;
 volatile static uint32_t adc_sample_p = 0;
+volatile static uint32_t mic_peak_level = 0;
 volatile static int16_t adc_data_i[MAX_ADC_SAMPLES] = {0};
 volatile static int16_t adc_data_q[MAX_ADC_SAMPLES] = {0};
+volatile static float mic_gain = 0.0f;
 volatile static bool save_settings_now = false;
 
 void __not_in_flash_func(adc_interrupt_handler)(void)
@@ -244,6 +258,8 @@ static void save_settings(void)
   EEPROM.put(2*sizeof(uint32_t),(uint32_t)radio.spectrum);
   EEPROM.put(3*sizeof(uint32_t),(uint32_t)radio.cw_mode);
   EEPROM.put(4*sizeof(uint32_t),(uint32_t)radio.cw_time);
+  EEPROM.put(5*sizeof(uint32_t),(uint32_t)radio.mic_gain);
+  EEPROM.put(6*sizeof(uint32_t),(uint32_t)radio.cessb?1u:0u);
   EEPROM.end();
   init_i2s();
   digitalWrite(PIN_MUTE,UNMUTE);
@@ -261,6 +277,12 @@ static void restore_settings(void)
     EEPROM.get(2*sizeof(uint32_t),data32); radio.spectrum = (uint8_t)data32;
     EEPROM.get(3*sizeof(uint32_t),data32); radio.cw_mode = (uint8_t)data32;
     EEPROM.get(4*sizeof(uint32_t),data32); radio.cw_time = (uint8_t)data32;
+    EEPROM.get(5*sizeof(uint32_t),data32); radio.mic_gain = (uint8_t)data32;
+    EEPROM.get(6*sizeof(uint32_t),data32); radio.cessb = data32==1?true:false;
+  }
+  if (radio.mic_gain<50ul || radio.mic_gain>150ul)
+  {
+    radio.mic_gain = DEFAULT_MIC_GAIN;
   }
   EEPROM.end();
 }
@@ -823,6 +845,7 @@ void __not_in_flash_func(loop)(void)
 {
   // run DSP on core 0
   static bool tx = false;
+  static uint32_t tx_peak_delay = 0;
   if (tx)
   {
     // TX, check if changed to RX
@@ -835,10 +858,10 @@ void __not_in_flash_func(loop)(void)
         int16_t tx_q = 0;
         switch (radio.mode)
         {
-          case MODE_LSB: DSP::process_mic(adc_value,tx_q,tx_i);   break;
-          case MODE_USB: DSP::process_mic(adc_value,tx_i,tx_q);   break;
-          case MODE_CWL: CW::process_cw(radio.keydown,tx_i,tx_q); break;
-          case MODE_CWU: CW::process_cw(radio.keydown,tx_i,tx_q); break;
+          case MODE_LSB: DSP::process_mic(adc_value,tx_q,tx_i,mic_gain,radio.cessb); break;
+          case MODE_USB: DSP::process_mic(adc_value,tx_i,tx_q,mic_gain,radio.cessb); break;
+          case MODE_CWL: CW::process_cw(radio.keydown,tx_i,tx_q);                    break;
+          case MODE_CWU: CW::process_cw(radio.keydown,tx_i,tx_q);                    break;
         }
         tx_i = constrain(tx_i,-512,+511);
         tx_q = constrain(tx_q,-512,+511);
@@ -850,7 +873,18 @@ void __not_in_flash_func(loop)(void)
         adc_data_q[adc_sample_p] = tx_q<<5;
         adc_sample_p++;
         adc_sample_p &= (MAX_ADC_SAMPLES-1);
-        if (radio.mode==MODE_CWL || radio.mode==MODE_CWU)
+        if (radio.mode==MODE_LSB || radio.mode==MODE_USB)
+        {
+          if (millis()>tx_peak_delay)
+          {
+            mic_peak_level = DSP::get_mic_peak_level(adc_value);
+          }
+          else
+          {
+            mic_peak_level = 0;
+          }
+        }
+        else if (radio.mode==MODE_CWL || radio.mode==MODE_CWU)
         {
           // generate the sidetone
           int32_t dac_audio = CW::sidetone(radio.keydown);
@@ -882,6 +916,8 @@ void __not_in_flash_func(loop)(void)
       // switch to TX
       adc_gpio_init(PIN_MIC);
       adc_select_input(MIC_MUX);
+      mic_gain = (float)radio.mic_gain / 100.0f;
+      tx_peak_delay = millis() + 100u;
       tx = true;
     }
     else
@@ -905,8 +941,8 @@ void __not_in_flash_func(loop)(void)
           {
             case MODE_LSB: dac_audio = DSP::process_ssb(qq,ii,radio.jnr); break;
             case MODE_USB: dac_audio = DSP::process_ssb(ii,qq,radio.jnr); break;
-            case MODE_CWL: dac_audio = DSP::process_cw(qq,ii);            break;
-            case MODE_CWU: dac_audio = DSP::process_cw(ii,qq);            break;
+            case MODE_CWL: dac_audio = DSP::process_cw(qq,ii,radio.jnr);  break;
+            case MODE_CWU: dac_audio = DSP::process_cw(ii,qq,radio.jnr);  break;
           }
           dac_audio = constrain(dac_audio,-2048l,+2047l);
           dac_audio += 2048l;
@@ -996,10 +1032,7 @@ static void process_ssb_tx(void)
   delay(50);
 
   // wait for PTT release
-  uint32_t mic_peak_level = 0;
-  uint32_t mic_level_update = 0;
   uint32_t tx_display_update = 0;
-  uint32_t mic_hangtime_update = 0;
   while (digitalRead(PIN_PTT)==LOW)
   {
     const uint32_t now = millis();
@@ -1007,43 +1040,11 @@ static void process_ssb_tx(void)
     {
       // spectrum data is mic input
       process_spectrum();
-      if (now>tx_display_update)
-      {
-        update_display();
-        tx_display_update = now + 50ul;
-      }
     }
-    else
+    if (now>tx_display_update)
     {
-      static const uint32_t MIC_LEVEL_DECAY_RATE = 50ul;
-      static const uint32_t MIC_LEVEL_HANG_TIME = 1000ul;
-      const uint32_t mic_level = abs(adc_value)>>5;
-      if (mic_level>mic_peak_level)
-      {
-        mic_peak_level = mic_level;
-        mic_level_update = now + MIC_LEVEL_DECAY_RATE;
-        mic_hangtime_update = now + MIC_LEVEL_HANG_TIME;
-      }
-      else
-      {
-        if (now>mic_hangtime_update)
-        {
-          if (now>mic_level_update)
-          {
-            if (mic_peak_level) mic_peak_level--;
-            mic_level_update = now + MIC_LEVEL_DECAY_RATE;
-          }
-        }
-      }
-      if (now>tx_display_update)
-      {
-        update_display(mic_peak_level);
-        tx_display_update = now + 50ul;
-      }
-      else
-      {
-        delayMicroseconds(32u);
-      }
+      tx_display_update = now + 50ul;
+      update_display(mic_peak_level);
     }
   }
 }
@@ -1168,6 +1169,8 @@ void loop1(void)
   static uint32_t old_jnr = radio.jnr;
   static uint32_t old_cw_mode = radio.cw_mode;
   static uint32_t old_cw_time = radio.cw_time;
+  static uint32_t old_mic_gain = radio.mic_gain;
+  static bool old_cessb = radio.cessb;
   static uint32_t show_step = 0;
 
   // process button press
@@ -1266,6 +1269,13 @@ void loop1(void)
           case OPTION_CW_SPEED_15:   radio.cw_time = 80u;            break;
           case OPTION_CW_SPEED_20:   radio.cw_time = 60u;            break;
           case OPTION_CW_SPEED_25:   radio.cw_time = 48u;            break;
+          case OPTION_MIC_50:        radio.mic_gain = 50u;           break;
+          case OPTION_MIC_75:        radio.mic_gain = 75u;           break;
+          case OPTION_MIC_100:       radio.mic_gain = 100u;          break;
+          case OPTION_MIC_125:       radio.mic_gain = 125u;          break;
+          case OPTION_MIC_150:       radio.mic_gain = 150u;          break;
+          case OPTION_CESSB_ON:      radio.cessb = true;             break;
+          case OPTION_CESSB_OFF:     radio.cessb = false;            break;
         }
         break;
       }
@@ -1291,6 +1301,16 @@ void loop1(void)
     if (radio.cw_time != old_cw_time)
     {
       old_cw_time = radio.cw_time;
+      settings_changed = true;
+    }
+    if (radio.mic_gain != old_mic_gain)
+    {
+      old_mic_gain = radio.mic_gain;
+      settings_changed = true;
+    }
+    if (radio.cessb != old_cessb)
+    {
+      old_cessb = radio.cessb;
       settings_changed = true;
     }
     if (settings_changed)
