@@ -1,4 +1,4 @@
- ## Build:
+ ## Build
  *  Board: Pi Pico 2
  *  Flash 4MB (Sketch: 4032KB, FS: 64KB)
  *  CPU Speed: 240Mhz
