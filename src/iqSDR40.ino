@@ -1,5 +1,5 @@
 /*
- * iqSDR40 Version 2.1.240
+ * iqSDR40 Version 2.3.240
  *
  * Copyright 2025 Ian Mitchell VK7IAN
  * Licenced under the GNU GPL Version 3
@@ -24,6 +24,8 @@
  * Version 1.3.240 update filters
  * Version 2.0.240 CESSB
  * Version 2.1.240 mic gain
+ * Version 2.2.240 RX bandwidth
+ * Version 2.3.240 remove spectrum hack
  */
 
 #include <si5351.h>
@@ -42,7 +44,7 @@
 
 //#define YOUR_CALL "VK7IAN"
 
-#define VERSION_STRING         " V2.1."
+#define VERSION_STRING         " V2.3."
 #define SPECTRUM_OFF           0u
 #define SPECTRUM_RX            1u
 #define SPECTRUM_TX            2u
@@ -70,6 +72,7 @@
 #define UNMUTE                 HIGH
 #define CW_STRAIGHT            0u
 #define CW_PADDLE              1u
+#define DEFAULT_BANDWIDTH      BANDWIDTH_2400
 
 #define PIN_PTT      0 // Mic PTT (active low) and CW Paddle A
 #define PIN_UNUSED1  1 // free pin
@@ -148,6 +151,7 @@ volatile static struct
   uint8_t cw_mode;
   uint8_t cw_time;
   uint8_t mic_gain;
+  uint8_t bandwidth;
   bool cessb;
   bool tx_enable;
   bool keydown;
@@ -164,6 +168,7 @@ radio =
   DEFAULT_CW_MODE,
   DEFAULT_CW_TIME,
   DEFAULT_MIC_GAIN,
+  DEFAULT_BANDWIDTH,
   false,
   false,
   false
@@ -260,6 +265,7 @@ static void save_settings(void)
   EEPROM.put(4*sizeof(uint32_t),(uint32_t)radio.cw_time);
   EEPROM.put(5*sizeof(uint32_t),(uint32_t)radio.mic_gain);
   EEPROM.put(6*sizeof(uint32_t),(uint32_t)radio.cessb?1u:0u);
+  EEPROM.put(7*sizeof(uint32_t),(uint32_t)radio.bandwidth);
   EEPROM.end();
   init_i2s();
   digitalWrite(PIN_MUTE,UNMUTE);
@@ -279,10 +285,15 @@ static void restore_settings(void)
     EEPROM.get(4*sizeof(uint32_t),data32); radio.cw_time = (uint8_t)data32;
     EEPROM.get(5*sizeof(uint32_t),data32); radio.mic_gain = (uint8_t)data32;
     EEPROM.get(6*sizeof(uint32_t),data32); radio.cessb = data32==1?true:false;
+    EEPROM.get(7*sizeof(uint32_t),data32); radio.bandwidth = (uint8_t)data32;
   }
-  if (radio.mic_gain<50ul || radio.mic_gain>150ul)
+  if (radio.mic_gain<50ul || radio.mic_gain>200ul)
   {
     radio.mic_gain = DEFAULT_MIC_GAIN;
+  }
+  if (radio.bandwidth<BANDWIDTH_2200 || radio.bandwidth>BANDWIDTH_3000)
+  {
+    radio.bandwidth = DEFAULT_BANDWIDTH;
   }
   EEPROM.end();
 }
@@ -937,12 +948,14 @@ void __not_in_flash_func(loop)(void)
           adc_sample_p++;
           adc_sample_p &= (MAX_ADC_SAMPLES-1);
           int32_t dac_audio = 0;
+          const uint8_t jnr = radio.jnr;
+          const uint8_t bw = radio.bandwidth;
           switch (radio.mode)
           {
-            case MODE_LSB: dac_audio = DSP::process_ssb(qq,ii,radio.jnr); break;
-            case MODE_USB: dac_audio = DSP::process_ssb(ii,qq,radio.jnr); break;
-            case MODE_CWL: dac_audio = DSP::process_cw(qq,ii,radio.jnr);  break;
-            case MODE_CWU: dac_audio = DSP::process_cw(ii,qq,radio.jnr);  break;
+            case MODE_LSB: dac_audio = DSP::process_ssb(qq,ii,jnr,bw); break;
+            case MODE_USB: dac_audio = DSP::process_ssb(ii,qq,jnr,bw); break;
+            case MODE_CWL: dac_audio = DSP::process_cw(qq,ii,jnr);     break;
+            case MODE_CWU: dac_audio = DSP::process_cw(ii,qq,jnr);     break;
           }
           dac_audio = constrain(dac_audio,-2048l,+2047l);
           dac_audio += 2048l;
@@ -1170,6 +1183,7 @@ void loop1(void)
   static uint32_t old_cw_mode = radio.cw_mode;
   static uint32_t old_cw_time = radio.cw_time;
   static uint32_t old_mic_gain = radio.mic_gain;
+  static uint32_t old_bandwidth = radio.bandwidth;
   static bool old_cessb = radio.cessb;
   static uint32_t show_step = 0;
 
@@ -1246,36 +1260,41 @@ void loop1(void)
         const option_value_t option = process_menu();
         switch (option)
         {
-          case OPTION_MODE_LSB:      radio.set_mode = SETMODE_LSB;   break;
-          case OPTION_MODE_USB:      radio.set_mode = SETMODE_USB;   break;
-          case OPTION_MODE_CWL:      radio.set_mode = SETMODE_CWL;   break;
-          case OPTION_MODE_CWU:      radio.set_mode = SETMODE_CWU;   break;
-          case OPTION_MODE_AUTO:     radio.set_mode = SETMODE_AUTO;  break;
-          case OPTION_STEP_10:       radio.step = 10U;               break;
-          case OPTION_STEP_100:      radio.step = 100U;              break;
-          case OPTION_STEP_500:      radio.step = 500U;              break;
-          case OPTION_STEP_1000:     radio.step = 1000U;             break;
-          case OPTION_SPECTRUM_RX:   radio.spectrum = SPECTRUM_RX;   break; 
-          case OPTION_SPECTRUM_TX:   radio.spectrum = SPECTRUM_TX;   break; 
-          case OPTION_SPECTRUM_RXTX: radio.spectrum = SPECTRUM_RXTX; break; 
-          case OPTION_SPECTRUM_OFF:  radio.spectrum = SPECTRUM_OFF;  break; 
-          case OPTION_JNR_1:         radio.jnr = 1u;                 break; 
-          case OPTION_JNR_2:         radio.jnr = 2u;                 break; 
-          case OPTION_JNR_3:         radio.jnr = 3u;                 break; 
-          case OPTION_JNR_OFF:       radio.jnr = 0u;                 break; 
-          case OPTION_CW_STRAIGHT:   radio.cw_mode = CW_STRAIGHT;    break;
-          case OPTION_CW_PADDLE:     radio.cw_mode = CW_PADDLE;      break;
-          case OPTION_CW_SPEED_10:   radio.cw_time = 120u;           break;
-          case OPTION_CW_SPEED_15:   radio.cw_time = 80u;            break;
-          case OPTION_CW_SPEED_20:   radio.cw_time = 60u;            break;
-          case OPTION_CW_SPEED_25:   radio.cw_time = 48u;            break;
-          case OPTION_MIC_50:        radio.mic_gain = 50u;           break;
-          case OPTION_MIC_75:        radio.mic_gain = 75u;           break;
-          case OPTION_MIC_100:       radio.mic_gain = 100u;          break;
-          case OPTION_MIC_125:       radio.mic_gain = 125u;          break;
-          case OPTION_MIC_150:       radio.mic_gain = 150u;          break;
-          case OPTION_CESSB_ON:      radio.cessb = true;             break;
-          case OPTION_CESSB_OFF:     radio.cessb = false;            break;
+          case OPTION_MODE_LSB:       radio.set_mode = SETMODE_LSB;     break;
+          case OPTION_MODE_USB:       radio.set_mode = SETMODE_USB;     break;
+          case OPTION_MODE_CWL:       radio.set_mode = SETMODE_CWL;     break;
+          case OPTION_MODE_CWU:       radio.set_mode = SETMODE_CWU;     break;
+          case OPTION_MODE_AUTO:      radio.set_mode = SETMODE_AUTO;    break;
+          case OPTION_STEP_10:        radio.step = 10U;                 break;
+          case OPTION_STEP_100:       radio.step = 100U;                break;
+          case OPTION_STEP_500:       radio.step = 500U;                break;
+          case OPTION_STEP_1000:      radio.step = 1000U;               break;
+          case OPTION_SPECTRUM_RX:    radio.spectrum = SPECTRUM_RX;     break; 
+          case OPTION_SPECTRUM_TX:    radio.spectrum = SPECTRUM_TX;     break; 
+          case OPTION_SPECTRUM_RXTX:  radio.spectrum = SPECTRUM_RXTX;   break; 
+          case OPTION_SPECTRUM_OFF:   radio.spectrum = SPECTRUM_OFF;    break; 
+          case OPTION_JNR_1:          radio.jnr = 1u;                   break; 
+          case OPTION_JNR_2:          radio.jnr = 2u;                   break; 
+          case OPTION_JNR_3:          radio.jnr = 3u;                   break; 
+          case OPTION_JNR_OFF:        radio.jnr = 0u;                   break; 
+          case OPTION_CW_STRAIGHT:    radio.cw_mode = CW_STRAIGHT;      break;
+          case OPTION_CW_PADDLE:      radio.cw_mode = CW_PADDLE;        break;
+          case OPTION_CW_SPEED_10:    radio.cw_time = 120u;             break;
+          case OPTION_CW_SPEED_15:    radio.cw_time = 80u;              break;
+          case OPTION_CW_SPEED_20:    radio.cw_time = 60u;              break;
+          case OPTION_CW_SPEED_25:    radio.cw_time = 48u;              break;
+          case OPTION_MIC_50:         radio.mic_gain = 50u;             break;
+          case OPTION_MIC_75:         radio.mic_gain = 75u;             break;
+          case OPTION_MIC_100:        radio.mic_gain = 100u;            break;
+          case OPTION_MIC_150:        radio.mic_gain = 150u;            break;
+          case OPTION_MIC_200:        radio.mic_gain = 200u;            break;
+          case OPTION_BANDWIDTH_2200: radio.bandwidth = BANDWIDTH_2200; break;
+          case OPTION_BANDWIDTH_2400: radio.bandwidth = BANDWIDTH_2400; break;
+          case OPTION_BANDWIDTH_2600: radio.bandwidth = BANDWIDTH_2600; break;
+          case OPTION_BANDWIDTH_2800: radio.bandwidth = BANDWIDTH_2800; break;
+          case OPTION_BANDWIDTH_3000: radio.bandwidth = BANDWIDTH_3000; break;
+          case OPTION_CESSB_ON:       radio.cessb = true;               break;
+          case OPTION_CESSB_OFF:      radio.cessb = false;              break;
         }
         break;
       }
@@ -1306,6 +1325,11 @@ void loop1(void)
     if (radio.mic_gain != old_mic_gain)
     {
       old_mic_gain = radio.mic_gain;
+      settings_changed = true;
+    }
+    if (radio.bandwidth != old_bandwidth)
+    {
+      old_bandwidth = radio.bandwidth;
       settings_changed = true;
     }
     if (radio.cessb != old_cessb)

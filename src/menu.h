@@ -25,12 +25,14 @@
     Off
     Exit
 
+  ...
+
   Exit
     Exit
 
 */
 
-#define NUM_MENU_ITEMS 9U
+#define NUM_MENU_ITEMS 10U
 
 enum menu_top_t
 {
@@ -38,6 +40,7 @@ enum menu_top_t
   MENU_MODE,
   MENU_JNR,
   MENU_SPECTRUM,
+  MENU_BANDWIDTH,
   MENU_CW_MODE,
   MENU_CW_SPEED,
   MENU_MIC_GAIN,
@@ -73,10 +76,15 @@ enum option_value_t
   OPTION_MIC_50,
   OPTION_MIC_75,
   OPTION_MIC_100,
-  OPTION_MIC_125,
   OPTION_MIC_150,
+  OPTION_MIC_200,
   OPTION_CESSB_ON,
   OPTION_CESSB_OFF,
+  OPTION_BANDWIDTH_2200,
+  OPTION_BANDWIDTH_2400,
+  OPTION_BANDWIDTH_2600,
+  OPTION_BANDWIDTH_2800,
+  OPTION_BANDWIDTH_3000,
   OPTION_EXIT,
   OPTION_NULL
 };
@@ -175,6 +183,19 @@ menu_options[] =
     }
   },
   {
+    MENU_BANDWIDTH,
+    "Bandwidth",
+    6U,
+    {
+      {OPTION_BANDWIDTH_2200,"2200 Hz"},
+      {OPTION_BANDWIDTH_2400,"2400 Hz"},
+      {OPTION_BANDWIDTH_2600,"2600 Hz"},
+      {OPTION_BANDWIDTH_2800,"2800 Hz"},
+      {OPTION_BANDWIDTH_3000,"3000 Hz"},
+      {OPTION_EXIT,"Exit"}
+    }
+  },
+  {
     MENU_MIC_GAIN,
     "Mic Gain",
     6U,
@@ -182,8 +203,8 @@ menu_options[] =
       {OPTION_MIC_50,"Gain 50%"},
       {OPTION_MIC_75,"Gain 75%"},
       {OPTION_MIC_100,"Gain 100%"},
-      {OPTION_MIC_125,"Gain 125%"},
       {OPTION_MIC_150,"Gain 150%"},
+      {OPTION_MIC_200,"Gain 200%"},
       {OPTION_EXIT,"Exit"}
     }
   },

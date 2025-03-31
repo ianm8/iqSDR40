@@ -1419,15 +1419,11 @@ namespace spectrum
     for (int32_t i=0,j=511;i<512;i++,j--)
     {
       uint32_t mag_adjusted = magnitude[j];
-      if (i<384) mag_adjusted <<= 1;
-      if (i<64) mag_adjusted <<= 1;
       mag[i] = log16(mag_adjusted);
     }
     for (int32_t i=512,j=1023;i<1024;i++,j--)
     {
       uint32_t mag_adjusted = magnitude[j];
-      if (i>640) mag_adjusted <<= 1;
-      if (i>960) mag_adjusted <<= 1;
       mag[i] = log16(mag_adjusted);
     }
   }

@@ -20,7 +20,7 @@ namespace DSP
   {
     // limit gain to max of 40 (32db)
     static const float max_gain = 40.0f;
-    // about 10dB per second
+    // decay about 10dB per second
     static const float k = 0.99996f;
 
     const float magnitude = fabsf(in);
@@ -69,8 +69,9 @@ namespace DSP
     return (uint8_t)UTIL::map(log_peak,S9_from_min,S9_from_max,S9_min,S9_max);
   }
 
-  static const int16_t __not_in_flash_func(process_ssb)(const int16_t in_i,const int16_t in_q,const uint32_t jnr_level)
+  static const int16_t __not_in_flash_func(process_ssb)(const int16_t in_i,const int16_t in_q,const uint32_t jnr_level,const uint8_t bw)
   {
+    // remove DC
     const float ii = FILTER::dc1f((float)in_i / 32768.0f);
     const float qq = FILTER::dc2f((float)in_q / 32768.0f);
 
@@ -82,7 +83,7 @@ namespace DSP
     const float ssb = p45 - n45;
 
     // LPF
-    const float audio_raw = FILTER::lpf_2400f_rx(ssb);
+    const float audio_raw = FILTER::bwf[bw](ssb);
 
     // JNR
     const float audio_out = FILTER::jnr(audio_raw,jnr_level);
@@ -93,6 +94,7 @@ namespace DSP
 
   static const int16_t __not_in_flash_func(process_cw)(const int16_t in_i,const int16_t in_q,const uint32_t jnr_level)
   {
+    // remove DC
     const float ii = FILTER::dc1f((float)in_i / 32768.0f);
     const float qq = FILTER::dc2f((float)in_q / 32768.0f);
 
