@@ -13,3 +13,5 @@
  * Version 1.3.240 update filters
  * Version 2.0.240 CESSB
  * Version 2.1.240 mic gain
+ * Version 2.2.240 RX bandwidth
+ * Version 2.3.240 remove spectrum hack
