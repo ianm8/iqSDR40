@@ -148,8 +148,8 @@ namespace DSP
   {
     const float mag_raw = sqrtf(ii*ii + qq*qq);
     const float mag_max = fmaxf(mag_raw, 1.0f);
-    ii = FILTER::lpf_2400if_tx(ii / mag_max);
-    qq = FILTER::lpf_2400qf_tx(qq / mag_max);
+    ii = FILTER::lpf_2600if_tx(ii / mag_max);
+    qq = FILTER::lpf_2600qf_tx(qq / mag_max);
   }
 
   const void __not_in_flash_func(process_mic)(const int16_t s,int16_t &out_i,int16_t &out_q,const float mic_gain,const bool cessb_on)
@@ -163,7 +163,7 @@ namespace DSP
     // convert to int
     // output is 10 bits
     const float ac_sig = FILTER::dcf(((float)s)*(1.0f/2048.0f));
-    const float mic_sig = FILTER::lpf_2400f_tx(ac_sig);
+    const float mic_sig = FILTER::lpf_2600f_tx(ac_sig);
     const float ii1 = FILTER::fap1f(mic_sig);
     const float qq1 = FILTER::fap2f(mic_sig);
     float ii2 = ii1 * mic_gain;

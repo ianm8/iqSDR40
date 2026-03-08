@@ -1,7 +1,7 @@
 /*
- * iqSDR40 Version 2.3.240
+ * iqSDR40 Version 2.4.240
  *
- * Copyright 2025 Ian Mitchell VK7IAN
+ * Copyright 2026 Ian Mitchell VK7IAN
  * Licenced under the GNU GPL Version 3
  *
  * libraries
@@ -14,8 +14,10 @@
  *  Board: Pi Pico 2
  *  Flash 4MB (Sketch: 4032KB, FS: 64KB)
  *  CPU Speed: 240Mhz
- *  Optimize: -O2
+ *  Optimize: -O3
  *  USB Stack: No USB
+ *
+ * TODO: direct CW - see uP40
  *
  * Version 0.9.240 code cleanup
  * Version 1.0.240 CW paddle support and bug fixes
@@ -26,6 +28,7 @@
  * Version 2.1.240 mic gain
  * Version 2.2.240 RX bandwidth
  * Version 2.3.240 remove spectrum hack
+ * Version 2.4.240 TX bandwidth
  */
 
 #include <si5351.h>
@@ -44,7 +47,7 @@
 
 //#define YOUR_CALL "VK7IAN"
 
-#define VERSION_STRING         " V2.3."
+#define VERSION_STRING         " V2.4."
 #define SPECTRUM_OFF           0u
 #define SPECTRUM_RX            1u
 #define SPECTRUM_TX            2u
@@ -200,7 +203,7 @@ volatile static int16_t adc_data_q[MAX_ADC_SAMPLES] = {0};
 volatile static float mic_gain = 0.0f;
 volatile static bool save_settings_now = false;
 
-void __not_in_flash_func(adc_interrupt_handler)(void)
+static void __not_in_flash_func(adc_interrupt_handler)(void)
 {
   volatile static uint32_t counter = 0;
   volatile static uint32_t adc_raw = 0;
