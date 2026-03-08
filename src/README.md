@@ -2,7 +2,7 @@
  *  Board: Pi Pico 2
  *  Flash 4MB (Sketch: 4032KB, FS: 64KB)
  *  CPU Speed: 240Mhz
- *  Optimize: -O2
+ *  Optimize: -O3
  *  USB Stack: No USB
 
 ## Some history
@@ -15,3 +15,4 @@
  * Version 2.1.240 mic gain
  * Version 2.2.240 RX bandwidth
  * Version 2.3.240 remove spectrum hack
+ * Version 2.4.240 TX bandwidth
